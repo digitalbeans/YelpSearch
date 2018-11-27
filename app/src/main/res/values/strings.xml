@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">YelpSearch</string>
+    <string name="action_category">Category</string>
+</resources>
