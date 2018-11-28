@@ -22,7 +22,10 @@ import android.view.MenuItem
 import java.util.jar.Manifest
 import android.content.Intent
 import android.support.v4.app.ActivityCompat.startActivityForResult
+import android.support.v7.widget.RecyclerView
 import android.view.MenuInflater
+import kotlinx.android.synthetic.main.business_list_item.view.*
+import net.digitalbeans.yelpsearch.R.id.linearLayoutManager
 import net.digitalbeans.yelpsearch.R.id.rv_business_list
 
 class MainActivity : AppCompatActivity() {
@@ -32,6 +35,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private val ADD_TASK_REQUEST = 1
     private var currentLocation: Location? = null
+    private lateinit var scrollListener: RecyclerView.OnScrollListener
+    private var category: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,7 +47,7 @@ class MainActivity : AppCompatActivity() {
             fusedLocationClient.lastLocation.addOnSuccessListener { location: Location? ->
 
                 currentLocation = location
-                getBusinesses(currentLocation, null)
+                getBusinesses(currentLocation, null, 0, true)
             }
         }
 
@@ -50,6 +55,24 @@ class MainActivity : AppCompatActivity() {
 
         rv_business_list.layoutManager = LinearLayoutManager(this)
         rv_business_list.adapter = BusinessAdapter(businessList, this)
+
+        setRecyclerViewScrollListener()
+    }
+
+    private fun setRecyclerViewScrollListener() {
+        scrollListener = object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView?, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                val totalItemCount = rv_business_list.layoutManager.itemCount
+                val linearLayoutManager = rv_business_list.layoutManager as LinearLayoutManager
+                val lastVisible = linearLayoutManager.findLastVisibleItemPosition()
+                if (totalItemCount == lastVisible + 1) {
+                    Log.d("MyTAG", "Load new list")
+                    getBusinesses(currentLocation, category, totalItemCount, false)
+                }
+            }
+        }
+        rv_business_list.addOnScrollListener(scrollListener)
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -75,14 +98,15 @@ class MainActivity : AppCompatActivity() {
         if (resultCode == Activity.RESULT_OK) {
             if (data != null) {
                 val selectedCategory = data.extras.getString("result")
+                category = selectedCategory
                 if (selectedCategory.isNotEmpty()) {
-                    getBusinesses(currentLocation, selectedCategory)
+                    getBusinesses(currentLocation, selectedCategory, 0, true)
                 }
             }
         }
     }
 
-    fun getBusinesses(location: Location?, category: String?) {
+    fun getBusinesses(location: Location?, category: String?, offset: Int, reload: Boolean = true) {
 
         if (location != null) {
             var retrofit: Retrofit = Retrofit.Builder()
@@ -92,7 +116,7 @@ class MainActivity : AppCompatActivity() {
 
             var searchApi = retrofit.create((Search::class.java))
             var call =
-                searchApi.getBusinesses("restaurants", 0, location.latitude, location.longitude, "distance", category)
+                searchApi.getBusinesses("restaurants", offset, location.latitude, location.longitude, "distance", category)
 
             call.enqueue(object : Callback<Businesses> {
 
@@ -102,7 +126,12 @@ class MainActivity : AppCompatActivity() {
                     businessList = ArrayList(businesses)
 
                     var adapter: BusinessAdapter = rv_business_list.adapter as BusinessAdapter
-                    adapter.items = businessList
+                    if (reload) {
+                        adapter.items = businessList
+                    }
+                    else {
+                        adapter.items.addAll(businessList)
+                    }
                     adapter.notifyDataSetChanged()
                 }
 
